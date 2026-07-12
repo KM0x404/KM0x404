@@ -829,7 +829,7 @@
 
         // initialize state
         const savedVol = localStorage.getItem(STORAGE_VOL);
-        const savedTime = localStorage.getItem(STORAGE_TIME);
+        // const savedTime = localStorage.getItem(STORAGE_TIME);
         let lastVol = 0.5; // default fallback
 
         if (savedVol !== null) {
@@ -837,14 +837,15 @@
             slider.value = savedVol;
             if (audio.volume > 0) lastVol = audio.volume;
         } else {
-            audio.volume = 0;
-            slider.value = 0;
-        }
+    audio.volume = 0.3;
+    slider.value = 0.3;
+    lastVol = 0.3;
+}
         updateIcon(audio.volume);
 
-        if (savedTime) {
-            audio.currentTime = parseFloat(savedTime);
-        }
+       // if (savedTime) {
+         //   audio.currentTime = parseFloat(savedTime);
+     //   }
 
         // toggle mute logic
         icon.addEventListener('click', () => {
@@ -875,11 +876,11 @@
         });
 
         // save position periodically
-        setInterval(() => {
-            if (!audio.paused) {
-                localStorage.setItem(STORAGE_TIME, audio.currentTime);
-            }
-        }, 1000);
+       // setInterval(() => {
+  //          if (!audio.paused) {
+  //              localStorage.setItem(STORAGE_TIME, audio.currentTime);
+  //          }
+    //    }, 1000);
 
         function updateIcon(vol) {
             icon.className = 'fas volume-icon ' + (vol === 0 ? 'fa-volume-mute' : (vol < 0.5 ? 'fa-volume-down' : 'fa-volume-up'));
