@@ -723,12 +723,9 @@
         </div>
     </div>
 
-    <video id="bg-video" autoplay loop muted playsinline preload="auto">
+    <video id="bg-video" autoplay loop playsinline preload="auto">
         <source src="https://github.com/SYS-0xA7/SYS_0xA7/releases/download/assets/video.mp4" type="video/mp4">
     </video>
-    <audio id="bg-music" loop>
-        <source src="music.mp3" type="audio/mpeg">
-    </audio>
 
     <canvas id="snow-canvas"></canvas>
     <canvas id="audio-visualizer"></canvas>
@@ -820,67 +817,49 @@
     <script>
         const DISCORD_ID = "1463597892462972969";
 
-        // --- music & volume logic ---
-        const audio = document.getElementById('bg-music');
+        // --- volume logic (uses video audio) ---
+        const vid = document.getElementById('bg-video');
         const slider = document.getElementById('vol-slider');
         const icon = document.getElementById('vol-icon');
         const STORAGE_VOL = 'sys_volume';
-        const STORAGE_TIME = 'sys_audio_time';
+        let lastVol = 0.5;
 
-        // initialize state
         const savedVol = localStorage.getItem(STORAGE_VOL);
-        // const savedTime = localStorage.getItem(STORAGE_TIME);
-        let lastVol = 0.5; // default fallback
-
         if (savedVol !== null) {
-            audio.volume = parseFloat(savedVol);
+            vid.volume = parseFloat(savedVol);
             slider.value = savedVol;
-            if (audio.volume > 0) lastVol = audio.volume;
+            if (vid.volume > 0) lastVol = vid.volume;
         } else {
-    audio.volume = 0.3;
-    slider.value = 0.3;
-    lastVol = 0.3;
-}
-        updateIcon(audio.volume);
+            vid.volume = 0.3;
+            slider.value = 0.3;
+            lastVol = 0.3;
+        }
+        updateIcon(vid.volume);
 
-       // if (savedTime) {
-         //   audio.currentTime = parseFloat(savedTime);
-     //   }
-
-        // toggle mute logic
         icon.addEventListener('click', () => {
-            if (audio.volume > 0) {
-                lastVol = audio.volume;
-                audio.volume = 0;
+            if (vid.volume > 0) {
+                lastVol = vid.volume;
+                vid.volume = 0;
                 slider.value = 0;
             } else {
-                audio.volume = lastVol;
+                vid.volume = lastVol;
                 slider.value = lastVol;
-                if (audio.paused) audio.play();
+                if (vid.paused) vid.play();
             }
-            localStorage.setItem(STORAGE_VOL, audio.volume);
-            updateIcon(audio.volume);
+            localStorage.setItem(STORAGE_VOL, vid.volume);
+            updateIcon(vid.volume);
         });
 
-        // event listeners
         slider.addEventListener('input', (e) => {
             const vol = parseFloat(e.target.value);
-            audio.volume = vol;
+            vid.volume = vol;
             if (vol > 0) lastVol = vol;
             localStorage.setItem(STORAGE_VOL, vol);
             updateIcon(vol);
-            
-            if (vol > 0 && audio.paused) {
-                audio.play();
+            if (vol > 0 && vid.paused) {
+                vid.play();
             }
         });
-
-        // save position periodically
-       // setInterval(() => {
-  //          if (!audio.paused) {
-  //              localStorage.setItem(STORAGE_TIME, audio.currentTime);
-  //          }
-    //    }, 1000);
 
         function updateIcon(vol) {
             icon.className = 'fas volume-icon ' + (vol === 0 ? 'fa-volume-mute' : (vol < 0.5 ? 'fa-volume-down' : 'fa-volume-up'));
@@ -1055,7 +1034,7 @@
 
         // click to enter logic
 
-        // --- Audio Visualizer ---
+        // --- Audio Visualizer (uses video audio) ---
         let audioContext, analyser, source;
         const vCanvas = document.getElementById('audio-visualizer');
         const vCtx = vCanvas.getContext('2d');
@@ -1073,13 +1052,13 @@
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 audioContext = new AudioContext();
                 analyser = audioContext.createAnalyser();
-                analyser.smoothingTimeConstant = 0.92; // smoother
+                analyser.smoothingTimeConstant = 0.92;
 
-                source = audioContext.createMediaElementSource(audio);
+                source = audioContext.createMediaElementSource(vid);
                 source.connect(analyser);
                 analyser.connect(audioContext.destination);
 
-                analyser.fftSize = 64; // significantly fewer bars for performance
+                analyser.fftSize = 64;
                 visualize();
             } catch(e) {
                 console.error("Visualizer init failed:", e);
@@ -1145,25 +1124,18 @@
                 loader.style.opacity = '0';
                 loader.style.visibility = 'hidden';
                 
-                // play media
-                const vid = document.getElementById('bg-video');
-                if(vid.paused) vid.play().catch(()=>{});
-
                 // init visualizer
                 if (!audioContext) initVisualizer();
                 if (audioContext && audioContext.state === 'suspended') audioContext.resume();
 
-                // play audio if volume is allowed
-                if (audio.volume > 0) {
-                    audio.play().catch(e => console.log("Audio play error", e));
-                }
+                // play video (audio comes from video)
+                if (vid.paused) vid.play().catch(()=>{});
             });
         });
     </script>
 </body>
 
 </html>
-
 
 
 
