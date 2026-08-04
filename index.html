@@ -723,9 +723,12 @@
         </div>
     </div>
 
-    <video id="bg-video" autoplay loop playsinline preload="auto">
-        <source src="https://github.com/SYS-0xA7/SYS_0xA7/releases/download/assets/video.mp4" type="video/mp4">
+    <video id="bg-video" autoplay loop muted playsinline preload="auto">
+        <source src="video.mp4" type="video/mp4">
     </video>
+    <audio id="bg-music" loop>
+        <source src="music.mp3" type="audio/mpeg">
+    </audio>
 
     <canvas id="snow-canvas"></canvas>
     <canvas id="audio-visualizer"></canvas>
@@ -817,49 +820,67 @@
     <script>
         const DISCORD_ID = "1463597892462972969";
 
-        // --- volume logic (uses video audio) ---
-        const vid = document.getElementById('bg-video');
+        // --- music & volume logic ---
+        const audio = document.getElementById('bg-music');
         const slider = document.getElementById('vol-slider');
         const icon = document.getElementById('vol-icon');
         const STORAGE_VOL = 'sys_volume';
-        let lastVol = 0.5;
+        const STORAGE_TIME = 'sys_audio_time';
 
+        // initialize state
         const savedVol = localStorage.getItem(STORAGE_VOL);
-        if (savedVol !== null) {
-            vid.volume = parseFloat(savedVol);
-            slider.value = savedVol;
-            if (vid.volume > 0) lastVol = vid.volume;
-        } else {
-            vid.volume = 0.3;
-            slider.value = 0.3;
-            lastVol = 0.3;
-        }
-        updateIcon(vid.volume);
+        // const savedTime = localStorage.getItem(STORAGE_TIME);
+        let lastVol = 0.5; // default fallback
 
+        if (savedVol !== null) {
+            audio.volume = parseFloat(savedVol);
+            slider.value = savedVol;
+            if (audio.volume > 0) lastVol = audio.volume;
+        } else {
+    audio.volume = 0.3;
+    slider.value = 0.3;
+    lastVol = 0.3;
+}
+        updateIcon(audio.volume);
+
+       // if (savedTime) {
+         //   audio.currentTime = parseFloat(savedTime);
+     //   }
+
+        // toggle mute logic
         icon.addEventListener('click', () => {
-            if (vid.volume > 0) {
-                lastVol = vid.volume;
-                vid.volume = 0;
+            if (audio.volume > 0) {
+                lastVol = audio.volume;
+                audio.volume = 0;
                 slider.value = 0;
             } else {
-                vid.volume = lastVol;
+                audio.volume = lastVol;
                 slider.value = lastVol;
-                if (vid.paused) vid.play();
+                if (audio.paused) audio.play();
             }
-            localStorage.setItem(STORAGE_VOL, vid.volume);
-            updateIcon(vid.volume);
+            localStorage.setItem(STORAGE_VOL, audio.volume);
+            updateIcon(audio.volume);
         });
 
+        // event listeners
         slider.addEventListener('input', (e) => {
             const vol = parseFloat(e.target.value);
-            vid.volume = vol;
+            audio.volume = vol;
             if (vol > 0) lastVol = vol;
             localStorage.setItem(STORAGE_VOL, vol);
             updateIcon(vol);
-            if (vol > 0 && vid.paused) {
-                vid.play();
+            
+            if (vol > 0 && audio.paused) {
+                audio.play();
             }
         });
+
+        // save position periodically
+       // setInterval(() => {
+  //          if (!audio.paused) {
+  //              localStorage.setItem(STORAGE_TIME, audio.currentTime);
+  //          }
+    //    }, 1000);
 
         function updateIcon(vol) {
             icon.className = 'fas volume-icon ' + (vol === 0 ? 'fa-volume-mute' : (vol < 0.5 ? 'fa-volume-down' : 'fa-volume-up'));
@@ -1034,7 +1055,8 @@
 
         // click to enter logic
 
-        // --- Audio Visualizer (disabled: cross-origin video) ---
+        // --- Audio Visualizer ---
+        let audioContext, analyser, source;
         const vCanvas = document.getElementById('audio-visualizer');
         const vCtx = vCanvas.getContext('2d');
 
@@ -1043,30 +1065,68 @@
             vCanvas.height = vCanvas.offsetHeight;
         }
         window.addEventListener('resize', resizeVisualizer);
-        resizeVisualizer();
 
-        // Simulated visualizer - cross-origin video createMediaElementSource kullanamaz
+        function initVisualizer() {
+            resizeVisualizer();
+            if(audioContext) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioContext = new AudioContext();
+                analyser = audioContext.createAnalyser();
+                analyser.smoothingTimeConstant = 0.92; // smoother
+
+                source = audioContext.createMediaElementSource(audio);
+                source.connect(analyser);
+                analyser.connect(audioContext.destination);
+
+                analyser.fftSize = 64; // significantly fewer bars for performance
+                visualize();
+            } catch(e) {
+                console.error("Visualizer init failed:", e);
+            }
+        }
+
         function visualize() {
-            const barCount = 28;
-            const halfWidth = vCanvas.width / 2;
-            const barWidth = halfWidth / barCount;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
 
             const draw = () => {
                 requestAnimationFrame(draw);
+                
+                if(!analyser) return;
+                analyser.getByteFrequencyData(dataArray);
+
                 vCtx.clearRect(0, 0, vCanvas.width, vCanvas.height);
 
-                for (let i = 0; i < barCount; i++) {
-                    const seed = (Date.now() / 200 + i * 37) % 1000;
-                    const barHeight = (Math.sin(seed) * 0.3 + 0.5) * vCanvas.height * (vid.paused ? 0.1 : 0.7);
-                    const y = vCanvas.height - barHeight;
+                // Symmetrical: Edges to Center
+                // We map frequencies 0..N to Outer..Center
+                const halfWidth = vCanvas.width / 2;
+                // utilize only lower half of frequencies for better visual? 
+                // typically high freqs are empty. Let's use roughly 70% of bin count to stretch useful data.
+                const usefulBins = Math.floor(bufferLength * 0.7); 
+                const barWidth = (halfWidth / usefulBins);
+                
+                let barHeight;
 
-                    const gradient = vCtx.createLinearGradient(0, y, 0, vCanvas.height);
-                    gradient.addColorStop(0, 'rgba(212, 175, 55, 0.8)');
+                for (let i = 0; i < usefulBins; i++) {
+                    // scale height slightly down if it's too aggressive
+                    barHeight = dataArray[i] * 0.8; 
+
+                    const scaledHeight = (barHeight / 255) * vCanvas.height;
+
+                    const gradient = vCtx.createLinearGradient(0, vCanvas.height - scaledHeight, 0, vCanvas.height);
+                    gradient.addColorStop(0, '#d4af37');
                     gradient.addColorStop(1, 'rgba(212, 175, 55, 0)');
 
                     vCtx.fillStyle = gradient;
-                    vCtx.fillRect(i * barWidth, y, barWidth - 1, barHeight);
-                    vCtx.fillRect(vCanvas.width - ((i + 1) * barWidth), y, barWidth - 1, barHeight);
+
+                    // Left Side: 0 at x=0
+                    const xLeft = i * barWidth;
+                    // Right Side: 0 at x=width
+                    const xRight = vCanvas.width - ((i + 1) * barWidth);
+
+                    vCtx.fillRect(xLeft, vCanvas.height - scaledHeight, barWidth - 1, scaledHeight);
+                    vCtx.fillRect(xRight, vCanvas.height - scaledHeight, barWidth - 1, scaledHeight);
                 }
             };
             draw();
@@ -1085,18 +1145,25 @@
                 loader.style.opacity = '0';
                 loader.style.visibility = 'hidden';
                 
-                // play video with audio
-                vid.muted = false;
-                vid.play().catch(()=>{});
+                // play media
+                const vid = document.getElementById('bg-video');
+                if(vid.paused) vid.play().catch(()=>{});
 
-                // start visualizer animation
-                visualize();
+                // init visualizer
+                if (!audioContext) initVisualizer();
+                if (audioContext && audioContext.state === 'suspended') audioContext.resume();
+
+                // play audio if volume is allowed
+                if (audio.volume > 0) {
+                    audio.play().catch(e => console.log("Audio play error", e));
+                }
             });
         });
     </script>
 </body>
 
 </html>
+
 
 
 
